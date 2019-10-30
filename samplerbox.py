@@ -17,6 +17,7 @@
 AUDIO_DEVICE_ID = 2                     # change this number to use another soundcard
 SAMPLES_DIR = "."                       # The root directory containing the sample-sets. Example: "/media/" to look for samples on a USB stick / SD card
 USE_SERIALPORT_MIDI = False             # Set to True to enable MIDI IN via SerialPort (e.g. RaspberryPi's GPIO UART pins)
+USE_PP_MIDI = True                      # Set to True to enable MIDI commands via Scene_Board device connected in USB port (message: "@MIDI:<Status>,<Data0>,<Data1>")
 USE_I2C_7SEGMENTDISPLAY = False         # Set to True to use a 7-segment display via I2C
 USE_BUTTONS = False                     # Set to True to use momentary buttons (connected to RaspberryPi's GPIO pins) to change preset
 MAX_POLYPHONY = 80                      # This can be set higher, but 80 is a safe value
@@ -456,6 +457,27 @@ if USE_SERIALPORT_MIDI:
     MidiThread.daemon = True
     MidiThread.start()
 
+#########################################
+# MIDI IN via USB PORT
+#
+#########################################
+
+if USE_PP_MIDI:
+    import serial
+
+    ser = serial.Serial('/dev/ttyUSB0', baudrate=115200)       # see hack in /boot/cmline.txt : 38400 is 31250 baud for MIDI!
+
+    def MidiPPCallback():
+        message = [0, 0, 0]
+        while True:
+            line = ser.readline()  # read a line. Expected something like "@MIDI:244,100,127"
+            if line.startswith("@MIDI:"):
+                message=line.replace('@MIDI:', '').split(",")
+                MidiCallback(message, None)
+            
+    MidiThread = threading.Thread(target=MidiPPCallback)
+    MidiThread.daemon = True
+    MidiThread.start()
 
 #########################################
 # LOAD FIRST SOUNDBANK
