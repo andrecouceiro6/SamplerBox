@@ -14,7 +14,7 @@
 # CONFIG
 #########################################
 
-AUDIO_DEVICE_ID = 2                     # change this number to use another soundcard
+AUDIO_DEVICE_ID = 1                     # change this number to use another soundcard
 SAMPLES_DIR = "."                       # The root directory containing the sample-sets. Example: "/media/" to look for samples on a USB stick / SD card
 USE_SERIALPORT_MIDI = False             # Set to True to enable MIDI IN via SerialPort (e.g. RaspberryPi's GPIO UART pins)
 USE_PP_MIDI = True                      # Set to True to enable MIDI commands via Scene_Board device connected in USB port (message: "@MIDI:<Status>,<Data0>,<Data1>")
