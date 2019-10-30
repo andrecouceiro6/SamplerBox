@@ -473,8 +473,7 @@ if USE_PP_MIDI:
             line = ser.readline()  # read a line. Expected something like "@MIDI:244,100,127"
             if line.startswith("@MIDI:"):
                 messageS=line.replace('@MIDI:', '').split(",")
-                for idx in range(0,3):
-                    print messageS[idx]
+                for idx in range(3):
                     message[idx]=int(messageS[idx])
                 MidiCallback(message, None)
             
