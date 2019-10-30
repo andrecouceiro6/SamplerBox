@@ -472,7 +472,10 @@ if USE_PP_MIDI:
         while True:
             line = ser.readline()  # read a line. Expected something like "@MIDI:244,100,127"
             if line.startswith("@MIDI:"):
-                message=line.replace('@MIDI:', '').split(",")
+                messageS=line.replace('@MIDI:', '').split(",")
+                for idx in range(0,3):
+                    print messageS[idx]
+                    message[idx]=int(messageS[idx])
                 MidiCallback(message, None)
             
     MidiThread = threading.Thread(target=MidiPPCallback)
