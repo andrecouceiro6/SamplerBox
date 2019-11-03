@@ -18,6 +18,7 @@ AUDIO_DEVICE_ID = 1                     # change this number to use another soun
 SAMPLES_DIR = "."                       # The root directory containing the sample-sets. Example: "/media/" to look for samples on a USB stick / SD card
 USE_SERIALPORT_MIDI = False             # Set to True to enable MIDI IN via SerialPort (e.g. RaspberryPi's GPIO UART pins)
 USE_PP_MIDI = True                      # Set to True to enable MIDI commands via Scene_Board device connected in USB port (message: "@MIDI:<Status>,<Data0>,<Data1>")
+USE_CONSOLE_MIDI = False
 USE_I2C_7SEGMENTDISPLAY = False         # Set to True to use a 7-segment display via I2C
 USE_BUTTONS = False                     # Set to True to use momentary buttons (connected to RaspberryPi's GPIO pins) to change preset
 MAX_POLYPHONY = 80                      # This can be set higher, but 80 is a safe value
@@ -136,7 +137,7 @@ class Sound:
         else:
             self.loop = -1
             self.nframes = wf.getnframes()
-
+        #print("fname:%s,midinote:%d,velocity:%d,loop:%d,nframes:%d"%(self.fname,self.midinote,self.velocity,self.loop,self.nframes))
         self.data = self.frames2array(wf.readframes(self.nframes), wf.getsampwidth(), wf.getnchannels())
 
         wf.close()
@@ -196,7 +197,7 @@ def MidiCallback(message, time_stamp):
     note = message[1] if len(message) > 1 else None
     midinote = note
     velocity = message[2] if len(message) > 2 else None
-
+    #print("messagetype:%d,messagechannel:%d,midinote:%d,velocity:%d"%(messagetype,messagechannel,midinote,velocity))
     if messagetype == 9 and velocity == 0:
         messagetype = 8
 
@@ -322,22 +323,22 @@ def ActuallyLoad():
                 samples[midinote, 127] = Sound(file, midinote, 127)
 
     initial_keys = set(samples.keys())
-    for midinote in xrange(128):
-        lastvelocity = None
-        for velocity in xrange(128):
-            if (midinote, velocity) not in initial_keys:
-                samples[midinote, velocity] = lastvelocity
-            else:
-                if not lastvelocity:
-                    for v in xrange(velocity):
-                        samples[midinote, v] = samples[midinote, velocity]
-                lastvelocity = samples[midinote, velocity]
-        if not lastvelocity:
-            for velocity in xrange(128):
-                try:
-                    samples[midinote, velocity] = samples[midinote-1, velocity]
-                except:
-                    pass
+    # for midinote in xrange(128):
+    #     lastvelocity = None
+    #     for velocity in xrange(128):
+    #         if (midinote, velocity) not in initial_keys:
+    #             samples[midinote, velocity] = lastvelocity
+    #         else:
+    #             if not lastvelocity:
+    #                 for v in xrange(velocity):
+    #                     samples[midinote, v] = samples[midinote, velocity]
+    #             lastvelocity = samples[midinote, velocity]
+    #    if not lastvelocity:
+    #         for velocity in xrange(128):
+    #             try:
+    #                 samples[midinote, velocity] = samples[midinote-1, velocity]
+    #             except:
+    #                 pass
     if len(initial_keys) > 0:
         print 'Preset loaded: ' + str(preset)
         display("%04d" % preset)
@@ -465,19 +466,77 @@ if USE_SERIALPORT_MIDI:
 if USE_PP_MIDI:
     import serial
 
-    ser = serial.Serial('/dev/ttyUSB0', baudrate=115200)       # see hack in /boot/cmline.txt : 38400 is 31250 baud for MIDI!
-
     def MidiPPCallback():
-        message = [0, 0, 0]
+        CONNECT=0
+        RESUME=1
+        state=CONNECT
         while True:
-            line = ser.readline()  # read a line. Expected something like "@MIDI:244,100,127"
-            if line.startswith("@MIDI:"):
-                messageS=line.replace('@MIDI:', '').split(",")
-                for idx in range(3):
-                    message[idx]=int(messageS[idx])
-                MidiCallback(message, None)
+            if state==CONNECT:
+                for dev in os.listdir('/dev'):
+                    if dev.startswith('ttyUSB'):
+                        print("Connecting to %s" % dev)
+                        try:
+                            ser = serial.Serial(os.path.join('/dev', dev), baudrate=115200)
+                            print("Success")
+                            state=RESUME
+                        except:
+                            print("Fail")
+                            pass
+                time.sleep(2)
+            if state==RESUME:
+                message = [0, 0, 0]
+                try:
+                    line = ser.read_until('\r\n')  # read a line. Expected something like "@MIDI:244,100,127"
+                except:
+                    print("Lost connection")
+                    state=CONNECT
+                if line.startswith("@MIDI:"):
+                    line=line.replace('@MIDI:', '')
+                    line=line.replace('\r\n', '')
+                    messageS=line.split(",")
+                    success=1
+                    for idx in range(3):
+                        try:
+                            message[idx]=int(messageS[idx])
+                        except:
+                            success=0
+                            pass
+                    if success!=0:
+                        MidiCallback(message, None)
             
     MidiThread = threading.Thread(target=MidiPPCallback)
+    MidiThread.daemon = True
+    MidiThread.start()
+
+#########################################
+# MIDI IN via Console
+#
+#########################################
+
+if USE_CONSOLE_MIDI:
+    import sys
+
+    def MidiConsoleCallback():
+        time.sleep(5)
+        message = [0, 0, 0]
+        while True:
+            line = sys.stdin.readline()  # read a line. Expected something like "@MIDI:244,100,127"
+            if line.startswith("@MIDI:"):
+                line=line.replace('@MIDI:', '')
+                line=line.replace('\r', '')
+                line=line.replace('\n', '')
+                messageS=line.split(",")
+                success=1
+                for idx in range(3):
+                    try:
+                        message[idx]=int(messageS[idx])
+                    except:
+                        success=0
+                        pass
+                if success!=0:
+                    MidiCallback(message, None)
+            
+    MidiThread = threading.Thread(target=MidiConsoleCallback)
     MidiThread.daemon = True
     MidiThread.start()
 
@@ -486,9 +545,8 @@ if USE_PP_MIDI:
 #
 #########################################
 
-preset = 0
+preset = 1
 LoadSamples()
-
 
 #########################################
 # MIDI DEVICES DETECTION
